@@ -11,7 +11,7 @@ services:
       # Base URL Grist redirects to when navigating. Change this to your domain.
       APP_HOME_URL: https://grist.apps.iaminawe.net
       # Default email for the "Admin" account
-      GRIST_DEFAULT_EMAIL: gregg@iaminawe.com
+      GRIST_DEFAULT_EMAIL: test@example.org
     volumes:
       # Where to store persistent data, such as documents.
       - ${PERSIST_DIR}/grist:/persist
