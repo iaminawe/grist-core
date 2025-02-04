@@ -5,13 +5,13 @@ services:
       # Sets the header to look at for authentication
       GRIST_FORWARD_AUTH_HEADER: X-Forwarded-User
       # Forces Grist to only use a single team called 'Example'
-      GRIST_SINGLE_ORG: my-grist-team   # alternatively, GRIST_ORG_IN_PATH: "true" for multi-team operation
+      GRIST_SINGLE_ORG: iaminawe   # alternatively, GRIST_ORG_IN_PATH: "true" for multi-team operation
       # Force users to login (disable anonymous access)
       GRIST_FORCE_LOGIN: true
       # Base URL Grist redirects to when navigating. Change this to your domain.
-      APP_HOME_URL: https://grist.localhost
+      APP_HOME_URL: https://grist.apps.iaminawe.net
       # Default email for the "Admin" account
-      GRIST_DEFAULT_EMAIL: test@example.org
+      GRIST_DEFAULT_EMAIL: gregg@iaminawe.com
     volumes:
       # Where to store persistent data, such as documents.
       - ${PERSIST_DIR}/grist:/persist
@@ -27,8 +27,8 @@ services:
     image: traefik:latest
     ports:
       # HTTP Ports
-      - "80:80"
-      - "443:443"
+      - "81:80"
+      - "444:443"
       # The Web UI (enabled by --api.insecure=true)
       # - "8080:8080"
     volumes:
