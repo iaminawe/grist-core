@@ -1,8 +1,17 @@
 services:
   grist:
-    image: gristlabs/grist:latest
+   image: gristlabs/grist:latest
+    environment:
+      # Sets the header to look at for authentication
+      GRIST_FORWARD_AUTH_HEADER: X-Forwarded-User
+      # Forces Grist to only use a single team called 'Example'
+      GRIST_SINGLE_ORG: iaminawe   # alternatively, GRIST_ORG_IN_PATH: "true" for multi-team operation
+      # Force users to login (disable anonymous access)
+      GRIST_FORCE_LOGIN: false
+      # Base URL Grist redirects to when navigating. Change this to your domain.
+      APP_HOME_URL: https://grist.studio.iaminawe.net
+      # Default email for the "Admin" account
+      GRIST_DEFAULT_EMAIL: gregg@iaminawe.com
     volumes:
       # Where to store persistent data, such as documents.
-      - ./persist/grist:/persist
-    ports:
-      - 8484:8484
+      - ${PERSIST_DIR}/grist:/persist
