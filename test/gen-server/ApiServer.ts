@@ -180,23 +180,27 @@ describe('ApiServer', function() {
     assert.equal(resp.status, 200);
     assert.deepEqual(resp.data.map((org: any) => org.name),
       ['Chimpyland', 'EmptyOrg', 'EmptyWsOrg', 'Fish', 'Flightless',
-        'FreeTeam', 'NASA', 'Primately', 'TestAuditLogs', 'TestDailyApiLimit']);
+        'FreeTeam', 'NASA', 'Primately', 'TestAuditLogs', 'TestDailyApiLimit',
+        'TestMaxNewUserInvites']);
     // personal orgs should have an owner and no domain
     // createdAt and updatedAt are omitted since exact times cannot be predicted.
-    assert.deepEqual(omit(resp.data[0], 'createdAt', 'updatedAt'), {
-      id: await dbManager.testGetId('Chimpyland'),
-      name: 'Chimpyland',
-      access: 'owners',
-      // public is not set.
-      domain: 'docs-1',
-      host: null,
-      owner: {
-        id: await dbManager.testGetId('Chimpy'),
-        ref: await dbManager.testGetRef('Chimpy'),
-        name: 'Chimpy',
-        picture: null
+    assert.deepEqual(
+      omit(resp.data[0], 'createdAt', 'updatedAt', 'owner.createdAt'),
+      {
+        id: await dbManager.testGetId('Chimpyland'),
+        name: 'Chimpyland',
+        access: 'owners',
+        // public is not set.
+        domain: 'docs-1',
+        host: null,
+        owner: {
+          id: await dbManager.testGetId('Chimpy'),
+          ref: await dbManager.testGetRef('Chimpy'),
+          name: 'Chimpy',
+          picture: null
+        }
       }
-    });
+    );
     assert.isNotNull(resp.data[0].updatedAt);
     // regular orgs should have a domain and no owner
     assert.equal(resp.data[1].domain, 'blankiest');
@@ -241,19 +245,22 @@ describe('ApiServer', function() {
     const resp = await axios.get(`${homeUrl}/api/orgs/${oid}`, chimpy);
     assert.equal(resp.status, 200);
     // billingAccount is omitted since it isn't focus of this test.
-    assert.deepEqual(omit(resp.data, 'createdAt', 'updatedAt', 'billingAccount'), {
-      id: oid,
-      name: 'Chimpyland',
-      domain: 'docs-1',
-      host: null,
-      access: 'owners',
-      owner: {
-        id: await dbManager.testGetId('Chimpy'),
-        ref: await dbManager.testGetRef('Chimpy'),
-        name: 'Chimpy',
-        picture: null
+    assert.deepEqual(
+      omit(resp.data, 'createdAt', 'updatedAt', 'billingAccount', 'owner.createdAt'),
+      {
+        id: oid,
+        name: 'Chimpyland',
+        domain: 'docs-1',
+        host: null,
+        access: 'owners',
+        owner: {
+          id: await dbManager.testGetId('Chimpy'),
+          ref: await dbManager.testGetRef('Chimpy'),
+          name: 'Chimpy',
+          picture: null
+        }
       }
-    });
+    );
     assert.isNotNull(resp.data.updatedAt);
   });
 

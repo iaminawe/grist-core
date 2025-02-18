@@ -8,7 +8,7 @@
 import {logTelemetryEvent} from 'app/client/lib/telemetry';
 import {GristTooltips, Tooltip} from 'app/client/ui/GristTooltips';
 import {prepareForTransition} from 'app/client/ui/transitions';
-import {testId, theme, vars} from 'app/client/ui2018/cssVars';
+import {colors, testId, theme, vars} from 'app/client/ui2018/cssVars';
 import {icon} from 'app/client/ui2018/icons';
 import {makeLinks} from 'app/client/ui2018/links';
 import {menuCssClass} from 'app/client/ui2018/menus';
@@ -401,7 +401,7 @@ function buildHoverableInfoTooltip(
   tooltip: BindableValue<Tooltip>,
   ...domArgs: DomElementArg[]
 ) {
-  return cssInfoTooltipIcon('?',
+  return cssInfoTooltipButton('?',
     hoverTooltip(() => cssInfoTooltipTransientPopup(
       dom.domComputed(tooltip, (tip) => GristTooltips[tip]()),
       cssTooltipCorner(testId('tooltip-origin')),
@@ -491,6 +491,7 @@ const cssInfoTooltip = styled('div', `
   display: flex;
   align-items: center;
   column-gap: 8px;
+  font-weight: unset; // Don't want to inherit font settings in a tooltip
 `);
 
 const cssTooltipCorner = styled('div', `
@@ -580,6 +581,7 @@ const cssInfoTooltipIcon = styled('div', `
   color: ${theme.controlSecondaryFg};
   border-radius: 50%;
   user-select: none;
+  font-weight: initial;
 
   .${cssMenuItem.className}-sel & {
     color: ${theme.menuItemSelectedFg};
@@ -587,12 +589,22 @@ const cssInfoTooltipIcon = styled('div', `
   }
 `);
 
-const cssInfoTooltipButton = styled(cssInfoTooltipIcon, `
+export const cssInfoTooltipButton = styled(cssInfoTooltipIcon, `
   cursor: pointer;
 
   &:hover {
     border: 1px solid ${theme.controlSecondaryHoverFg};
     color: ${theme.controlSecondaryHoverFg};
+  }
+
+  &-in-banner {
+    color: ${colors.dark};
+    border-color: ${colors.dark};
+  }
+
+  &-in-banner:hover {
+    border-color: ${colors.lightGreen};
+    color: ${colors.lightGreen};
   }
 `);
 

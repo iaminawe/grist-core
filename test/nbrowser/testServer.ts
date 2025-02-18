@@ -90,7 +90,7 @@ export class TestServerMerged extends EventEmitter implements IMochaServer {
     // immediately.  It is simplest to use a diffent socket each time
     // we restart.
     const testingSocket = path.join(this.testDir, `testing-${this._starts}.socket`);
-    if (testingSocket.length >= 108) {
+    if (testingSocket.length >= 104) {
       // Unix socket paths typically can't be longer than this. Who knew. Make the error obvious.
       throw new Error(`Path of testingSocket too long: ${testingSocket.length} (${testingSocket})`);
     }
@@ -123,7 +123,10 @@ export class TestServerMerged extends EventEmitter implements IMochaServer {
       GRIST_SERVE_SAME_ORIGIN: 'true',
       // Run with HOME_PORT, STATIC_PORT, DOC_PORT, DOC_WORKER_COUNT in the environment to override.
       ...(useSinglePort ? {
-        APP_HOME_URL: this.getHost(),
+        // APP_HOME_URL needed if proxyUrl is set, otherwise can be omitted.
+        ...(this._proxyUrl ? {
+          APP_HOME_URL: this.getHost()
+        } : undefined),
         GRIST_SINGLE_PORT: 'true',
       } : (isCore ? {
         HOME_PORT: corePort,

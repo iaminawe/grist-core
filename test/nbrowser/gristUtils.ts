@@ -924,7 +924,7 @@ export async function loadDocMenu(relPath: string, wait: boolean|'skipOnboarding
  * Wait for the doc list to show, to know that workspaces are fetched, and imports enabled.
  */
 export async function waitForDocMenuToLoad(): Promise<void> {
-  await driver.findWait('.test-dm-doclist', 2000);
+  await driver.findWait('.test-dm-doclist', 8000); // postgres locally can be slow
   await driver.wait(() => driver.find('.test-dm-doclist').isDisplayed(), 2000);
 }
 
@@ -967,6 +967,41 @@ export async function fileDialogUpload(filePath: string, triggerDialogFunc: () =
   // It only seems to work with Chrome
   const paths = filePath.split(',').map(f => path.resolve(fixturesRoot, f)).join("\n");
   await driver.find('#file_dialog_input').sendKeys(paths);
+}
+
+/** Opens upload dialog for a cell */
+export async function openUploadDialog(cell: WebElement): Promise<void>
+export async function openUploadDialog(col: string, row: number): Promise<void>
+export async function openUploadDialog(...args: any): Promise<void> {
+  const cell = args.length === 1 ? args[0] : getCell(args[0], args[1]);
+  await cell.click();
+  await preventDefaultClickAction('#file_dialog_input');
+  await cell.find(".test-attachment-icon").click();
+}
+
+/** Returns a number attachments in a cell */
+export async function numberOfAttachments(cell: WebElement): Promise<number>
+export async function numberOfAttachments(col: string, row: number): Promise<number>
+export async function numberOfAttachments(...args: any): Promise<number> {
+  const cell: WebElement = args.length === 1 ? args[0] : getCell(args[0], args[1]);
+  return (await cell.findAll(".test-pw-thumbnail")).length;
+}
+
+/** Waits for specific number of attachments in a cell */
+export async function waitForAttachments(cell: WebElement, count: number): Promise<void>
+export async function waitForAttachments(col: string, row: number, count: number): Promise<void>
+export async function waitForAttachments(...args: any): Promise<void> {
+  const cell: WebElement = args.length === 3 ? getCell(args[0], args[1]) : args[0];
+  await waitToPass(async () => {
+    assert.equal(await numberOfAttachments(cell), args[args.length - 1]);
+  });
+}
+
+/** Uploads files to an attachment cell */
+export async function uploadFiles(...files: string[]) {
+  const paths = files.map(f => path.resolve(fixturesRoot, f)).join("\n");
+  await driver.find('#file_dialog_input').sendKeys(paths);
+  await waitForServer();
 }
 
 /**
@@ -1535,6 +1570,13 @@ export async function checkForErrors() {
 }
 
 /**
+ * Gets errors that were thrown by the app.
+ */
+export async function getAppErrors() {
+  return await driver.executeScript<string[]>(() => (window as any).getAppErrors());
+}
+
+/**
  * Opens a Creator Panel on Widget/Table settings tab.
  */
 export async function openWidgetPanel(tab: 'widget'|'sortAndFilter'|'data' = 'widget') {
@@ -1957,12 +1999,14 @@ export async function addUser(email: string|string[], role?: 'Owner'|'Viewer'|'E
   await driver.wait(async () => !await driver.find('.test-um-members').isPresent(), 500);
 }
 
-export async function removeUser(email: string): Promise<void> {
+export async function removeUser(emails: string|string[]): Promise<void> {
   await driver.findWait('.test-user-icon', 5000).click();
   await driver.find('.test-dm-org-access').click();
   await driver.findWait('.test-um-members', 500);
-  const kiwiRow = await driver.findContent('.test-um-member', email);
-  await kiwiRow.find('.test-um-member-delete').click();
+  for(const email of (Array.isArray(emails) ? emails : [emails])) {
+    const userRow = await driver.findContent('.test-um-member', email);
+    await userRow.find('.test-um-member-delete').click();
+  }
   await driver.find('.test-um-confirm').click();
   await driver.wait(async () => !await driver.find('.test-um-members').isPresent(), 500);
 }
@@ -3977,6 +4021,84 @@ export async function deleteWidgetWithData(title?: string) {
   await driver.find('.test-modal-confirm').click();
   await waitForServer();
 }
+
+export async function waitForTrue(check: () => Promise<boolean>, timeMs: number = 4000) {
+  await waitToPass(async () => {
+    assert.isTrue(await check());
+  }, timeMs);
+}
+
+export const waitForAdminPanel = () => driver.findWait('.test-admin-panel', 2000);
+
+/** Gets the value from the select component */
+export async function getSelectValue(selector: string) {
+  return await driver.find(`${selector} .test-select-row`).getText();
+}
+
+/** Sets a value on the select component */
+export async function setSelectValue(selector: string, value: string|RegExp) {
+  await driver.find(`${selector} .test-select-row`).click();
+  await driver.findContent(`.test-select-menu li`, value).click();
+  await waitForServer();
+}
+
+/** Builds an interface for the select component  */
+export function buildSelectComponent(selector: string) {
+  return {
+    selector,
+    element() {
+      return driver.find(selector);
+    },
+    /**
+     * Returns the currently selected value (text).
+     */
+    async value() {
+      return await getSelectValue(this.selector);
+    },
+    /**
+     * Waits for the select component to have the given value.
+     */
+    async waitForValue(value: string|RegExp) {
+      await waitToPass(async () => {
+        assert.equal(await getSelectValue(this.selector), value);
+      });
+    },
+    /**
+     * Selects the given value in the select component.
+     */
+    async select(value: string|RegExp) {
+      await setSelectValue(this.selector, value);
+    },
+    /**
+     * Returns the list of options in the select component (by opening the select menu).
+     */
+    async options() {
+      await driver.find(`${this.selector} .test-select-row`).click();
+      // Wait for the menu.
+      await driver.findWait('.test-select-menu', 1000);
+      const options =  await driver.findAll(`.test-select-menu li`, el => el.getText());
+      await driver.sendKeys(Key.ESCAPE);
+      return options;
+    },
+    /**
+     * Waits for the select component to be displayed.
+     */
+    async waitForDisplay() {
+      await waitToPass(async () => {
+        assert.isTrue(await driver.findWait(this.selector, 1000).isDisplayed());
+      });
+    },
+    /**
+     * Waits until the select component is umonuted from dom.
+     */
+    async waitForRemoval() {
+      await waitToPass(async () => {
+        assert.isFalse(await this.element().isPresent());
+      });
+    }
+  };
+}
+
 
 } // end of namespace gristUtils
 

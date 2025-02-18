@@ -41,6 +41,7 @@ import * as testUtils from 'test/server/testUtils';
 import {waitForIt} from 'test/server/wait';
 import defaultsDeep = require('lodash/defaultsDeep');
 import pick = require('lodash/pick');
+import range = require('lodash/range')
 import {getDatabase} from 'test/testUtils';
 import {testDailyApiLimitFeatures} from 'test/gen-server/seed';
 
@@ -2432,23 +2433,32 @@ function testDocApi(settings: {
 
   });
 
+  async function addAttachmentsToDoc(docId: string, attachments: {name: string, contents: string}[],
+                                     user: AxiosRequestConfig = chimpy) {
+    const formData = new FormData();
+    for (const attachment of attachments) {
+      formData.append('upload', attachment.contents, attachment.name);
+    }
+    const resp = await axios.post(`${serverUrl}/api/docs/${docId}/attachments`, formData,
+      defaultsDeep({headers: formData.getHeaders()}, user));
+    assert.equal(resp.status, 200);
+    assert.equal(resp.data.length, attachments.length);
+    return resp;
+  }
+
   describe('attachments', function () {
     it("POST /docs/{did}/attachments adds attachments", async function () {
-      let formData = new FormData();
-      formData.append('upload', 'foobar', "hello.doc");
-      formData.append('upload', '123456', "world.jpg");
-      let resp = await axios.post(`${serverUrl}/api/docs/${docIds.TestDoc}/attachments`, formData,
-        defaultsDeep({headers: formData.getHeaders()}, chimpy));
-      assert.equal(resp.status, 200);
-      assert.deepEqual(resp.data, [1, 2]);
+      const uploadResp = await addAttachmentsToDoc(docIds.TestDoc, [
+        { name: 'hello.doc', contents: 'foobar' },
+        { name: 'world.jpg', contents: '123456' },
+      ], chimpy);
+      assert.deepEqual(uploadResp.data, [1, 2]);
 
       // Another upload gets the next number.
-      formData = new FormData();
-      formData.append('upload', 'abcdef', "hello.png");
-      resp = await axios.post(`${serverUrl}/api/docs/${docIds.TestDoc}/attachments`, formData,
-        defaultsDeep({headers: formData.getHeaders()}, chimpy));
-      assert.equal(resp.status, 200);
-      assert.deepEqual(resp.data, [3]);
+      const upload2Resp = await addAttachmentsToDoc(docIds.TestDoc, [
+        { name: 'hello.png', contents: 'abcdef' },
+      ], chimpy);
+      assert.deepEqual(upload2Resp.data, [3]);
     });
 
     it("GET /docs/{did}/attachments lists attachment metadata", async function () {
@@ -2752,13 +2762,11 @@ function testDocApi(settings: {
         docId = await userApi.newDoc({name: 'TestDocExternalAttachments'}, wid);
         docUrl = `${serverUrl}/api/docs/${docId}`;
 
-        const formData = new FormData();
-        formData.append('upload', 'foobar', "hello.doc");
-        formData.append('upload', '123456', "world.jpg");
-        formData.append('upload', 'foobar', "hello2.doc");
-        const resp = await axios.post(`${docUrl}/attachments`, formData,
-          defaultsDeep({headers: formData.getHeaders()}, chimpy));
-        assert.equal(resp.status, 200);
+        const resp = await addAttachmentsToDoc(docId, [
+          { name: 'hello.doc', contents: 'foobar' },
+          { name: 'world.jpg', contents: '123456' },
+          { name: 'hello2.doc', contents: 'foobar' }
+        ], chimpy);
         assert.deepEqual(resp.data, [1, 2, 3]);
       });
 
@@ -2802,6 +2810,23 @@ function testDocApi(settings: {
           },
           locationSummary: "internal",
         });
+      });
+
+      it("POST /docs/{did}/copy fails when the document has external attachments", async function () {
+        const worker1 = await userApi.getWorkerAPI(docId);
+        await assert.isRejected(worker1.copyDoc(docId, undefined, 'copy'), /status 400/);
+      });
+
+      it("POST /docs/{did} with sourceDocId fails to copy a document with external attachments", async function () {
+        const chimpyWs = await userApi.newWorkspace({name: "Chimpy's Workspace"}, ORG_NAME);
+        const resp = await axios.post(`${serverUrl}/api/docs`, {
+          sourceDocumentId: docId,
+          documentName: 'copy of TestDocExternalAttachments',
+          asTemplate: false,
+          workspaceId: chimpyWs
+        }, chimpy);
+        assert.equal(resp.status, 400);
+        assert.match(resp.data.error, /external attachments/);
       });
     });
   });
@@ -3429,7 +3454,7 @@ function testDocApi(settings: {
       rightChanges: {tableRenames: [], tableDeltas: {}}
     });
 
-    await doc2.addRows('Table1', {A: [2]});
+    await doc2.addRows('Table1', {A: range(2, 100)});
     comp = await doc1.compareDoc(docId2);
     assert.equal(comp.summary, 'right');
     assert.equal(comp.left.n, 3);
@@ -3440,22 +3465,54 @@ function testDocApi(settings: {
     comp = await doc1.compareDoc(docId2, {detail: true});
     assert.deepEqual(comp.details!.leftChanges,
       {tableRenames: [], tableDeltas: {}});
-    const addA2: ActionSummary = {
+    const addA2To99Truncated: ActionSummary = {
       tableRenames: [],
       tableDeltas: {
         Table1: {
           updateRows: [],
           removeRows: [],
-          addRows: [3],
+          addRows: range(3, 101),
           columnDeltas: {
-            A: {[3]: [null, [2]]},
-            manualSort: {[3]: [null, [3]]},
+            A: [...range(3, 12), 100].reduce(
+              (acc, cur) => ({ ...acc, [cur]: [null, [cur - 1]] }),
+              {}
+            ),
+            manualSort: [...range(3, 12), 100].reduce(
+              (acc, cur) => ({ ...acc, [cur]: [null, [cur]] }),
+              {}
+            ),
           },
           columnRenames: [],
-        }
-      }
+        },
+      },
     };
-    assert.deepEqual(comp.details!.rightChanges, addA2);
+    assert.deepEqual(comp.details!.rightChanges, addA2To99Truncated);
+
+    const addA2To99Full: ActionSummary = {
+      tableRenames: [],
+      tableDeltas: {
+        Table1: {
+          updateRows: [],
+          removeRows: [],
+          addRows: range(3, 101),
+          columnDeltas: {
+            A: range(3, 101).reduce(
+              (acc, cur) => ({ ...acc, [cur]: [null, [cur - 1]] }),
+              {}
+            ),
+            manualSort: range(3, 101).reduce(
+              (acc, cur) => ({ ...acc, [cur]: [null, [cur]] }),
+              {}
+            ),
+          },
+          columnRenames: [],
+        },
+      },
+    };
+    for (const maxRows of [100, null]) {
+      comp = await doc1.compareDoc(docId2, {detail: true, maxRows});
+      assert.deepEqual(comp.details!.rightChanges, addA2To99Full);
+    }
   });
 
   it("GET /docs/{did}/compare tracks changes within a doc", async function () {

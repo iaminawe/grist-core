@@ -11,7 +11,6 @@ import {CodeEditorPanel} from 'app/client/components/CodeEditorPanel';
 import * as commands from 'app/client/components/commands';
 import {CursorMonitor, ViewCursorPos} from "app/client/components/CursorMonitor";
 import {DocComm} from 'app/client/components/DocComm';
-import * as DocConfigTab from 'app/client/components/DocConfigTab';
 import {Drafts} from "app/client/components/Drafts";
 import {EditorMonitor} from "app/client/components/EditorMonitor";
 import {buildDefaultFormLayout} from 'app/client/components/Forms/FormView';
@@ -75,7 +74,7 @@ import {LocalPlugin} from "app/common/plugin";
 import {StringUnion} from 'app/common/StringUnion';
 import {TableData} from 'app/common/TableData';
 import {getGristConfig} from 'app/common/urlUtils';
-import {DocStateComparison} from 'app/common/UserAPI';
+import {AttachmentTransferStatus, DocStateComparison} from 'app/common/UserAPI';
 import {AttachedCustomWidgets, IAttachedCustomWidget, IWidgetType, WidgetType} from 'app/common/widgetTypes';
 import {CursorPos, UIRowId} from 'app/plugin/GristAPI';
 import {
@@ -162,7 +161,7 @@ export class GristDoc extends DisposableWithEvents {
   // component for keeping track of latest cursor position
   public cursorMonitor: CursorMonitor;
   // component for keeping track of a cell that is being edited
-  public editorMonitor: EditorMonitor;
+  public editorMonitor?: EditorMonitor;
   // component for keeping track of a cell that is being edited
   public draftMonitor: Drafts;
   // will document perform its own navigation (from anchor link)
@@ -208,6 +207,15 @@ export class GristDoc extends DisposableWithEvents {
   public isTimingOn = Observable.create(this, false);
 
   /**
+   * Observable for the attachment transfer status. It is send by the ActiveDoc whenever attachments'
+   * transfer job is started or finished or when the external storage is changed through the API.
+   * Note: direct json manipulation (in the DocInfoRec) are not notified by the ActiveDoc.
+   * Note: GristDoc doesn't load it at the start, it just listens to changes, so the user of this API
+   * needs to load the status manually if it is not yet set.
+   */
+  public attachmentTransfer = Observable.create(this, null as AttachmentTransferStatus|null);
+
+  /**
    * Checks if it is ok to show raw data popup for currently selected section.
    * We can't show raw data if:
    * - we already have full screen section (which looks the same)
@@ -251,7 +259,7 @@ export class GristDoc extends DisposableWithEvents {
     console.log("RECEIVED DOC RESPONSE", openDocResponse);
     this.isTimingOn.set(openDocResponse.isTimingOn);
     this.docData = new DocData(this.docComm, openDocResponse.doc);
-    this.docModel = new DocModel(this.docData, this.docPageModel);
+    this.docModel = this.autoDispose(new DocModel(this.docData, this.docPageModel));
     this.querySetManager = QuerySetManager.create(this, this.docModel, this.docComm);
     this.docPluginManager = new DocPluginManager({
       plugins,
@@ -527,6 +535,7 @@ export class GristDoc extends DisposableWithEvents {
       // This is overridden by the formula editor to insert "$col" variables when clicking cells.
       setCursor: this.onSetCursorPos.bind(this),
       createForm: this.onCreateForm.bind(this),
+      pushUndoAction: this._undoStack.pushAction.bind(this._undoStack),
     }, this, true));
 
     this.listenTo(app.comm, 'docUserAction', this.onDocUserAction);
@@ -536,8 +545,6 @@ export class GristDoc extends DisposableWithEvents {
     this.listenTo(app.comm, 'docChatter', this.onDocChatter);
 
     this._handleTriggerQueueOverflowMessage();
-
-    this.autoDispose(DocConfigTab.create({gristDoc: this}));
 
     this.rightPanelTool = Computed.create(this, (use) => this._getToolContent(use(this._rightPanelTool)));
 
@@ -896,6 +903,10 @@ export class GristDoc extends DisposableWithEvents {
       }
     } else if (message.data.timing) {
       this.isTimingOn.set(message.data.timing.status !== 'disabled');
+    } else if (message.data.attachmentTransfer) {
+      // This is message about the attachments transfer job. Look at the comment
+      // for the observable for more info.
+      this.attachmentTransfer.set(message.data.attachmentTransfer);
     }
   }
 
